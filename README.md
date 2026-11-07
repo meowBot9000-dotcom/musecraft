@@ -1,93 +1,98 @@
 # MuseCraft
 
-**Your Muse plays Minecraft. You watch it think.**
+A complete, self-hosted setup that enables a Muse — or another capable LLM agent — to play Minecraft Java Edition on a real server, with a live first-person stream, an authentic in-game HUD, and a real-time feed of the agent's stated intentions.
 
-MuseCraft wires a Muse agent directly into a Minecraft (Java, 1.21.6)
-survival world — no separate game-playing AI, no LLM API key for the bot.
-The Muse *is* the player: it sends plain-text commands (`goto`, `dig`,
-`craft`, `think`…) to a small Mineflayer bridge, reads JSON game state
-back, and makes every decision itself, up to and including the long road
-to the Ender Dragon.
+MuseCraft is not a separate AI. There is no external model service and no API key: the agent itself operates the bot directly through a small command bridge, in the same way it operates any other tool. The project packages everything required to reproduce that setup: the bridge, the streaming overlay, the server configuration, a step-by-step setup playbook written for agents, and a set of gameplay notes recording the failure modes of a complete survival run.
 
-It comes with a stream overlay built from the real 1.21.6 client: the
-actual HUD (hearts, hunger, XP bar, hotbar), a first-person view with the
-bot's own arm and hand holding its item — posed from the game client's
-own rendering constants — and a live **thoughts feed**, so you can watch
-it narrate its own run in real time.
+**[Agent Setup](AGENT_SETUP.md)** | **[Gameplay Notes](GAMEPLAY_NOTES.md)** | **[Upstream: Mindcraft](https://github.com/mindcraft-bots/mindcraft)**
 
-![What you get](docs/overview.png)
+> [!CAUTION]
+> This setup is designed for a local, single-user environment. The Minecraft server runs in offline mode and binds to the loopback interface only. Do not expose the server, viewer, or overlay ports to a network you do not control: offline mode performs no account authentication. Game textures are the intellectual property of Mojang/Microsoft; they are not distributed with this repository and must be extracted from a legitimately owned client installation (see [NOTICE.md](NOTICE.md)).
 
-## For users
+![The MuseCraft overlay: first-person view, authentic 1.21.6 HUD, and the live intentions feed](docs/overview.png)
 
-You don't set this up by hand. Point your Muse at this repo and say:
+## Overview
 
-> **Set up MuseCraft from this repo and try to beat Minecraft for me.**
+The system has four components:
 
-Your Muse reads [AGENT_SETUP.md](AGENT_SETUP.md) and does the rest:
-installs a Java 21 runtime and Node 20, downloads the official server
-from Mojang, clones [Mindcraft](https://github.com/mindcraft-bots/mindcraft)
-for the bot libraries, extracts the overlay textures from *your own*
-client jar, starts the server and bot, and verifies the whole chain.
+| Component | Description |
+| --- | --- |
+| Minecraft server | The official Mojang Java Edition 1.21.6 server, running locally in offline mode on `127.0.0.1:25565`. |
+| Bot bridge | `claude-bot/bot.cjs` — a [Mineflayer](https://github.com/PrismarineJS/mineflayer) client driven by line-delimited commands on standard input. Commands execute sequentially through a promise queue; `stop`, `state`, and `think` bypass the queue and run immediately. |
+| Viewer | A first-person renderer (prismarine-viewer) served on port `3007`. |
+| Overlay | A web page served on port `3008` combining the first-person view, the client HUD reconstructed from the 1.21.6 client itself (hotbar, health, hunger, experience, selected-item label), a first-person arm and held-item render, and a panel displaying the agent's intentions in real time. A JSON state endpoint is exposed at `/state`. |
 
-You will need:
-- A Muse (or similar agent) with a computer/shell it can run things on.
-- A legitimate copy of Minecraft: Java Edition (the server is downloaded
-  from Mojang; the overlay textures are extracted from your client jar —
-  no game assets are included in this repo).
-- Optionally, a Windows PC on the same network if you want the stream on
-  a big screen (see `windows/Setup-Kiosk.ps1`), and/or a Tailscale
-  account if you want to watch from your phone.
+Intentions are first-class: before acting, the agent issues `think <text>`, which is displayed on the overlay as it works. A person watching the stream can therefore follow not only what the bot does, but what it is trying to do.
 
-## For agents
+# Getting Started
 
-Read [AGENT_SETUP.md](AGENT_SETUP.md) and follow it end to end. Then read
-[GAMEPLAY_NOTES.md](GAMEPLAY_NOTES.md) before your first night — it is a
-short, expensive list of ways this bot dies and how not to.
+## Requirements
 
-## What's in here
+- Minecraft Java Edition **1.21.6**, with a legitimate client installation available locally (required twice: the server verifies against the version manifest, and the overlay's textures are extracted from the client jar).
+- **Node.js 20 LTS.** Node 24 is known to break native dependencies in the Mineflayer stack.
+- **Temurin JDK 21** (or equivalent) to run the server.
+- An agent capable of running shell commands and reading/writing files — for example, Muse. The setup playbook is written for the agent, not for manual installation.
+- Approximately 2 GB of free RAM for the server and bot processes.
 
-| Path | What it is |
-|---|---|
-| `claude-bot/bot.cjs` | The bridge: stdin commands → Mineflayer; JSON state/events → stdout; HUD/thoughts overlay server on :3008; first-person viewer on :3007 |
-| `claude-bot/extract-assets.py` | Pulls HUD/item/block/skin textures from your own 1.21.6 client jar into `claude-bot/assets/` |
-| `server/download-server.sh` | Downloads the official 1.21.6 server jar from Mojang and verifies its SHA-1 |
-| `server/server.properties.template` | Offline-mode localhost survival server config |
-| `scripts/start-server.sh`, `scripts/start-bot.sh` | Launchers |
-| `scripts/tunnel-loop.sh` | Optional self-healing reverse SSH tunnel so another machine (or phone, via Tailscale) can watch |
-| `windows/Setup-Kiosk.ps1` | Optional: fullscreen Edge kiosk + screenshot/focus helpers as scheduled tasks on a Windows viewing PC |
-| `AGENT_SETUP.md` | Step-by-step setup playbook for an agent |
-| `GAMEPLAY_NOTES.md` | Survival lessons learned the hard way (24 deaths and counting) |
+No LLM API key is required. The stock Mindcraft agent loop and its model profiles are not used; `keys.json` remains empty and `allow_insecure_coding` remains `false`.
 
-## How it plays
+## Install and Run
 
-One process, one stdin:
+The intended installation method is to give the repository to an agent:
 
-```
-think Day 12. Iron caves today — descending the west staircase, slowly.
-goto 5 64 158
-dig 5 58 153
-craft stone_pickaxe 1
-equip stone_pickaxe
-```
+> Clone this repository and set up MuseCraft by following `AGENT_SETUP.md`.
 
-Commands run sequentially through a promise queue, so one write can
-script a whole work sequence. `state`, `stop` and `think` bypass the
-queue and act immediately. The full command list is documented at the
-top of `claude-bot/bot.cjs`.
+The playbook covers, in order: portable installation of the JDK and Node.js runtimes; download of the official server jar with SHA-1 verification against Mojang's version manifest; server configuration; a pinned clone of Mindcraft (commit `e1c1fc3`); extraction of the client textures; launch order and verification at each stage; and optional remote viewing (reverse tunnel, Windows kiosk mode, and phone access), including the constraints that apply to each.
 
-The overlay at `http://127.0.0.1:3008` shows the first-person view
-(prismarine-viewer on :3007), the real client HUD, and the thoughts feed.
-The same page works over the tunnel on a viewing PC, or directly in a
-phone browser.
+For reference, the manual sequence is:
 
-## Credits & legal
+1. Download and verify the server: `server/download-server.sh`
+2. Configure the server from `server/server.properties.template`.
+3. Extract textures from your client jar: `python3 claude-bot/extract-assets.py <path-to-client-1.21.6.jar>`
+4. Start the server: `scripts/start-server.sh`
+5. Start the bot: `scripts/start-bot.sh`
+6. Open the overlay: `http://127.0.0.1:3008`
 
-- Built on [Mindcraft](https://github.com/mindcraft-bots/mindcraft) /
-  Mineflayer (MIT). MuseCraft does not vendor Mindcraft; setup clones it.
-- Minecraft is a trademark of Mojang/Microsoft. This is an unofficial
-  fan project, not affiliated with Mojang or Microsoft. No Minecraft
-  assets are distributed here — see [NOTICE.md](NOTICE.md).
-- The code in this repo is MIT licensed — see [LICENSE](LICENSE).
+# Configuration
 
-*First built by a Muse whose player asked it to "try and beat the
-entire game" — and then asked that other Muses be able to do the same.*
+The bridge is configured through environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `MC_HOST` | `127.0.0.1` | Minecraft server host. |
+| `MC_PORT` | `25565` | Minecraft server port. |
+| `MC_USER` | `MuseCraft` | Offline-mode username the bot joins with. |
+| `VIEW_PORT` | `3007` | First-person viewer port. |
+| `HUD_PORT` | `3008` | Overlay and `/state` port. |
+
+The server template enforces the properties the setup depends on — `online-mode=false`, `server-ip=127.0.0.1`, `spawn-protection=0` — and leaves world generation and difficulty at survival defaults. Gameplay is unmodified vanilla survival: no commands, no cheats.
+
+# Repository Layout
+
+| Path | Contents |
+| --- | --- |
+| `AGENT_SETUP.md` | The complete setup playbook, written for an agent to execute. |
+| `GAMEPLAY_NOTES.md` | Operational lessons from a full survival run — pathfinder behaviour, item-despawn timing, weather and mob hazards, and the command-queue semantics that matter in play. |
+| `claude-bot/bot.cjs` | The bot bridge and overlay server. |
+| `claude-bot/extract-assets.py` | Extracts the HUD, item, block, and player textures the overlay needs from a client jar. |
+| `server/` | Server download script (with checksum verification) and properties template. |
+| `scripts/` | Launchers for the server and bot, and an optional self-healing reverse-tunnel loop for remote viewing. |
+| `windows/Setup-Kiosk.ps1` | Optional: registers a fullscreen kiosk view, focus, screenshot, and window-listing tasks on a Windows viewing machine. |
+| `docs/overview.png` | The overlay as it appears in use. |
+
+# Gameplay Notes
+
+The bridge's command set is deliberately small (`goto`, `dig`, `collect`, `craft`, `equip`, `attack`, `state`, and related verbs), which makes the operational lessons correspondingly important. [GAMEPLAY_NOTES.md](GAMEPLAY_NOTES.md) records them in full; the most consequential are:
+
+- Verify the bot's Y coordinate numerically after every movement command. A bot below its expected floor is wedged or sinking, and digging in that state makes it worse.
+- The command queue survives the bot's death. A respawned bot will resume executing stale movement commands unless the process is restarted — the queue has no clear operation.
+- Dropped items despawn after 6,000 ticks in *loaded* chunks only. Recover death piles before doing anything else, and treat rain as a hard stop for surface travel: undead do not burn in rain.
+- Inventory displays can desynchronise after failed crafts. The inventory snapshot returned by a *successful* craft is authoritative.
+
+# Contributing
+
+Issues and pull requests are welcome, particularly: corrections to the setup playbook from clean-room installations, overlay fidelity fixes against the reference client, and gameplay notes from other agents' runs. Please keep the security posture intact — loopback-only binding, offline mode for local use, and no redistribution of Mojang assets.
+
+# License
+
+The code in this repository is released under the [MIT License](LICENSE). This project is not affiliated with Mojang or Microsoft; Minecraft is a trademark of Mojang Synergies AB. Texture assets are extracted locally from the user's own client installation and are governed by the [Minecraft EULA](https://www.minecraft.net/eula) — see [NOTICE.md](NOTICE.md).
