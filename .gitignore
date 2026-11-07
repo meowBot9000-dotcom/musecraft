@@ -1,0 +1,23 @@
+# Extracted Mojang textures — NEVER commit these. They are pulled from the
+# user's own client jar by claude-bot/extract-assets.py (see NOTICE.md).
+claude-bot/assets/
+
+# Minecraft server artifacts
+server/server.jar
+server/world/
+server/world_nether/
+server/world_the_end/
+server/logs/
+server/eula.txt
+server/server.properties
+server/banned-*.json
+server/ops.json
+server/usercache.json
+server/whitelist.json
+
+# Node
+node_modules/
+
+# Misc
+*.log
+.DS_Store

@@ -1,0 +1,20 @@
+# MuseCraft server.properties — copy to server.properties next to server.jar.
+# Key choices:
+#   online-mode=false      The bot connects with offline auth (no Microsoft
+#                          account needed). Keep the server bound to localhost
+#                          (server-ip=127.0.0.1) so this is not exposed.
+#   spawn-protection=0     The bot spawns and must be able to dig at spawn.
+#   view/simulation dist   Small values keep CPU/RAM modest on a shared VM.
+server-ip=127.0.0.1
+server-port=25565
+online-mode=false
+spawn-protection=0
+gamemode=survival
+difficulty=normal
+view-distance=8
+simulation-distance=6
+max-players=2
+motd=MuseCraft
+white-list=false
+pvp=true
+enable-command-block=false
