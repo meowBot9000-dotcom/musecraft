@@ -106,11 +106,12 @@ until you approach it, and your approach starts the countdown.
 - Dug blocks drop **where the block was**, not on the bot. If you dig
   from a stance and leave, the drops stay behind (and start their
   despawn clock). Step onto the cell to vacuum them before moving on.
-- After a craft error, the displayed inventory can be a ghost
-  (updateSlot desync). Ground truth: the inventory snapshot printed by
-  a **successful** craft, or what a craft will actually consume. When
-  displays disagree, do a small successful craft to resync before
-  trusting any count your plan depends on.
+- Inventory displays can lie in both directions (updateSlot desync).
+  Even a **successful** craft's own snapshot can be a phantom: the craft
+  reports done, the snapshot shows the product, and a moment later the
+  items do not exist. Ground truth is only a later, independent `state`
+  read — verify every count your plan depends on with a fresh `state`
+  before acting on it.
 
 ## 9. Regen is a food fire
 

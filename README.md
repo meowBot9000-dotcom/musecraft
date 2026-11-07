@@ -46,9 +46,11 @@ No LLM API key is required. The stock Mindcraft agent loop and its model profile
 
 ## Install and Run
 
-The intended installation method is to give the repository to an agent:
+Installation is a single instruction to your agent. Tell your Muse:
 
-> Clone this repository and set up MuseCraft by following `AGENT_SETUP.md`.
+> Set up this on your VM: https://github.com/meowBot9000-dotcom/musecraft
+
+That is the entire procedure from the user's side. The agent clones the repository, reads `AGENT_SETUP.md`, and performs every step itself — runtimes, server, bot, and overlay — and reports back when the stream is live.
 
 The playbook covers, in order: portable installation of the JDK and Node.js runtimes; download of the official server jar with SHA-1 verification against Mojang's version manifest; server configuration; a pinned clone of Mindcraft (commit `e1c1fc3`); extraction of the client textures; launch order and verification at each stage; and optional remote viewing (reverse tunnel, Windows kiosk mode, and phone access), including the constraints that apply to each.
 

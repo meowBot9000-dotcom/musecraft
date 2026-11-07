@@ -28,10 +28,28 @@ Total time: roughly 30–60 minutes, mostly downloads.
   **writable stdin** and readable stdout. The bot is controlled entirely
   through that pipe.
 
+When you are done, the layout looks like this (defaults — §6 lists the
+knobs that move things):
+
+```
+~/tools/
+  jdk-21*/                    # step 2
+  node-v20.20.2-linux-x64/    # step 3
+  mindcraft/                  # step 5; the bot lives in mindcraft/claude-bot/
+<musecraft>/server/           # step 4: server.jar + world/ live here
+```
+
 ## 1. Prerequisites
 
 You need: a shell, `curl`, `git`, `python3`, ~2 GB free disk, ~2 GB RAM
 headroom. Check what you have before installing anything.
+
+You also need a **C/C++ build toolchain** — node-gyp compiles native
+modules during `npm install` (step 5). The first-person viewer
+additionally needs the `canvas` package's system libraries (cairo,
+pango, libjpeg, giflib — the `-dev` packages on Debian/Ubuntu). Without
+them the viewer fails with an error at bot startup, but the overlay,
+HUD, thoughts feed and `/state` all still work (§9).
 
 ## 2. Java 21 (for the server)
 
@@ -70,11 +88,16 @@ cp server.properties.template server.properties
 echo "eula=true" > eula.txt   # only if your user accepts the Minecraft EULA
 ```
 
+If port 25565 is already in use on your machine, edit `server-port` in
+the generated `server.properties` to a free port, and pass the same port
+to the bot as `MC_PORT` (§6).
+
 First boot test:
 
 ```bash
 JAVA_HOME=~/tools/jdk-21* ../scripts/start-server.sh
-# wait for "Done" in the log / port 25565 listening, then stop it (Ctrl-C / kill)
+# wait for "Done" in the log / port 25565 listening, then stop it
+# (send `stop` on its stdin, or kill the process)
 ```
 
 Notes:
@@ -91,8 +114,43 @@ cd ~/tools   # or wherever you keep the checkout
 git clone https://github.com/mindcraft-bots/mindcraft
 cd mindcraft
 git checkout e1c1fc3   # commit this setup was built/verified against
+cp /path/to/musecraft/mindcraft-package-lock.json ./package-lock.json
 export PATH=~/tools/node-v20.20.2-linux-x64/bin:$PATH
-npm install
+npm ci            # exact install from the lockfile (preferred)
+                  # fallback: npm install
+```
+
+**Use the lockfile.** Mindcraft ships no lockfile of its own, so a bare
+`npm install` floats dependency versions — and the float is known to
+break: the `mineflayer` it resolves today requires a far newer
+`minecraft-data` than Mindcraft's `package.json` asks for, and the
+mismatch crashes the bot at startup. `mindcraft-package-lock.json` in
+this repo pins the exact set this setup was verified with (mineflayer
+4.39.0, minecraft-data 3.119.0, prismarine-viewer 1.33.0, canvas 3.2.3).
+
+If the install fails:
+
+- **Just retry first.** npm resumes; a second run often completes.
+- If node-gyp fails while downloading/extracting its Node headers
+  (`TAR_ENTRY_ERROR`, `fchown` EPERM), point it at the Node 20 tree you
+  already extracted: `npm install --nodedir=~/tools/node-v20.20.2-linux-x64`.
+- Sandboxed filesystems may throw EPERM noise under npm's massively
+  parallel extraction while sequential writers succeed. Retry, and rely
+  on the verification below rather than the exit code.
+
+**Verify the install before going further** — a partial install fails
+silently and surfaces later as inexplicable module errors:
+
+```bash
+# every package.json under node_modules must parse (a failed install
+# can leave one 0-byte file behind; reinstall that package if found)
+python3 -c "
+import glob, json
+bad = [p for p in glob.glob('node_modules/*/package.json')
+       if not open(p).read().strip() or not json.load(open(p))]
+print('corrupt:', bad if bad else 'none')"
+# the modules the bridge needs must actually load
+node -e "require('mineflayer'); require('mineflayer-pathfinder'); require('mineflayer-collectblock'); require('mineflayer-tool'); require('mineflayer-pvp'); require('vec3'); console.log('modules OK')"
 ```
 
 Then copy the bridge in and extract the overlay textures:
@@ -104,8 +162,11 @@ python3 claude-bot/extract-assets.py /path/to/client-1.21.6.jar
 ```
 
 - The client jar comes from the user's own Minecraft installation (see
-  the extractor's docstring for paths, or the piston-meta client
-  download). **Never redistribute the extracted assets** — they are
+  the extractor's docstring for paths). If the machine has no Minecraft
+  installation, fetch the official client jar the same way as the
+  server: `server/download-client.sh` resolves it from piston-meta and
+  verifies its SHA-1. Either way it is Mojang's file from Mojang's
+  servers. **Never redistribute the extracted assets** — they are
   Mojang's; `assets/` is gitignored in this repo for that reason.
 - Mindcraft may want a `keys.json` for its own AI features. You are not
   using them; an empty/absent file is fine because you never start
@@ -119,7 +180,9 @@ python3 claude-bot/extract-assets.py /path/to/client-1.21.6.jar
    `MINDIR=~/tools/mindcraft scripts/start-bot.sh`
    with the Node 20 PATH from step 3. Env knobs: `MC_USER` (in-game
    name, default `MuseCraft`), `MC_HOST/MC_PORT`, `HUD_PORT` (3008),
-   `VIEW_PORT` (3007).
+   `VIEW_PORT` (3007), and `NODE_BIN` (path to the Node 20 binary —
+   use it whenever the system `node` is a different major version,
+   which is this playbook's headline warning).
 3. Verify the bot connected:
    - Its stdout shows a `SPAWNED` JSON line with position/inventory.
    - `curl http://127.0.0.1:3008/state` returns JSON state.
@@ -132,6 +195,9 @@ state
 think Hello — MuseCraft is live. First day: wood, then stone, then shelter before dark.
 near oak_log 32
 ```
+
+(`near` returning an empty list is not an error — it depends on the
+biome you spawned in.)
 
 ## 7. Optional: let the user watch from another screen
 
@@ -180,11 +246,14 @@ viewing machine — Edge caches the page HTML.
 | Symptom | Likely cause / fix |
 |---|---|
 | Native module build errors during `npm install` | Wrong Node. Use Node 20 (step 3) and retry. |
+| `npm install` dies with `TAR_ENTRY_ERROR` / `fchown` EPERM, or leaves a 0-byte `package.json` in node_modules | Sandbox/FS denying node-gyp's header download or parallel extraction. Retry (npm resumes); if headers are the failure, `npm install --nodedir=<extracted Node 20 tree>`; then run §5's install verification and repair any corrupt package before launching. |
+| Bot crashes at startup: `Cannot read properties of undefined (reading 'version')` in mineflayer's loader | `minecraft-data` version drifted from `mineflayer`. Reinstall with this repo's `mindcraft-package-lock.json` (§5); do not hand-pick versions. |
+| `ERROR viewer failed: Cannot find module '../build/Release/canvas.node'` | The viewer's native `canvas` module didn't build (§1 lists its system libraries). The overlay, HUD, thoughts and `/state` still work — only the first-person pane is empty. Install the libraries and rebuild `canvas` to restore it. |
 | Server won't start, mentions EULA | Create `eula.txt` with `eula=true` (step 4). |
 | Bot can't connect / connection refused | Server not up yet, or wrong port. Check 25565 is listening; check `MC_PORT`. |
 | Overlay page loads but no textures (magenta/broken icons) | Assets not extracted, or extracted from the wrong version jar. Re-run the extractor with a 1.21.6 client jar. |
 | `goto` "succeeds" but the bot is somewhere odd | Normal pathfinder variance (±1 cell). Always verify with `/state` — see GAMEPLAY_NOTES. |
-| Crafting says "missing ingredients" you know you have | Inventory display desync. Trust the inventory snapshot printed by a *successful* craft; see GAMEPLAY_NOTES. |
+| Crafting says "missing ingredients" you know you have | Inventory display desync — and even a successful craft's snapshot can be a phantom. Trust only a later, independent `state` read; see GAMEPLAY_NOTES §8. |
 | Stream view on the PC didn't update after a code change | Edge cached the page. Kill `msedge`, re-run MCBotView. |
 | Tunnel forwards fail right after a drop | Ports take ~40 s to free. The loop retries forever; wait. |
 | Bot ignores `stop` and keeps walking later | `stop` doesn't clear the command queue. Restart the bot process — see GAMEPLAY_NOTES, lesson 1. |
