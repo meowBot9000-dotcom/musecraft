@@ -4,7 +4,7 @@ A complete, self-hosted setup that enables a Muse — or another capable LLM age
 
 MuseCraft is not a separate AI. There is no external model service and no API key: the agent itself operates the bot directly through a small command bridge, in the same way it operates any other tool. The project packages everything required to reproduce that setup: the bridge, the streaming overlay, the server configuration, a step-by-step setup playbook written for agents, and a set of gameplay notes recording the failure modes of a complete survival run.
 
-**[Agent Setup](AGENT_SETUP.md)** | **[Gameplay Notes](GAMEPLAY_NOTES.md)** | **[Upstream: Mindcraft](https://github.com/mindcraft-bots/mindcraft)**
+**[Agent Setup](AGENT_SETUP.md)** | **[Gameplay Notes](GAMEPLAY_NOTES.md)** | **[Built on: Mindcraft](https://github.com/mindcraft-bots/mindcraft)**
 
 > [!CAUTION]
 > This setup is designed for a local, single-user environment. The Minecraft server runs in offline mode and binds to the loopback interface only. Do not expose the server, viewer, or overlay ports to a network you do not control: offline mode performs no account authentication. Game textures are the intellectual property of Mojang/Microsoft; they are not distributed with this repository and must be extracted from a legitimately owned client installation (see [NOTICE.md](NOTICE.md)).
@@ -18,11 +18,19 @@ The system has four components:
 | Component | Description |
 | --- | --- |
 | Minecraft server | The official Mojang Java Edition 1.21.6 server, running locally in offline mode on `127.0.0.1:25565`. |
-| Bot bridge | `claude-bot/bot.cjs` — a [Mineflayer](https://github.com/PrismarineJS/mineflayer) client driven by line-delimited commands on standard input. Commands execute sequentially through a promise queue; `stop`, `state`, and `think` bypass the queue and run immediately. |
+| Bot bridge | `claude-bot/bot.cjs` — a [Mineflayer](https://github.com/PrismarineJS/mineflayer) client that runs inside a [Mindcraft](https://github.com/mindcraft-bots/mindcraft) checkout and is driven by line-delimited commands on standard input. Commands execute sequentially through a promise queue; `stop`, `state`, and `think` bypass the queue and run immediately. |
 | Viewer | A first-person renderer (prismarine-viewer) served on port `3007`. |
 | Overlay | A web page served on port `3008` combining the first-person view, the client HUD reconstructed from the 1.21.6 client itself (hotbar, health, hunger, experience, selected-item label), a first-person arm and held-item render, and a panel displaying the agent's intentions in real time. A JSON state endpoint is exposed at `/state`. |
 
 Intentions are first-class: before acting, the agent issues `think <text>`, which is displayed on the overlay as it works. A person watching the stream can therefore follow not only what the bot does, but what it is trying to do.
+
+## Built on Mindcraft
+
+MuseCraft is built on **[Mindcraft](https://github.com/mindcraft-bots/mindcraft)** (mindcraft-bots), the open-source framework for running LLM-driven agents in Minecraft on the Mineflayer stack. The relationship is structural, not incidental:
+
+- **The bot runs inside a Mindcraft checkout.** Setup clones Mindcraft at a pinned commit (`e1c1fc3`) and installs the bridge into it; the bridge imports its modules — `mineflayer`, `mineflayer-pathfinder`, `mineflayer-collectblock`, `mineflayer-tool`, `mineflayer-pvp`, and `prismarine-viewer` — from Mindcraft's installed dependency tree.
+- **What MuseCraft changes is the driver.** Mindcraft's own agent loop, bot profiles, and model integrations are not used: no API key is configured (`keys.json` remains empty) and code execution stays disabled (`allow_insecure_coding` remains `false`). In their place, the bridge exposes the bot to an external agent over standard input, and adds the streaming overlay, the reconstructed client HUD, and the intentions feed.
+- **No Mindcraft code is vendored in this repository.** Mindcraft is cloned separately during setup and remains under its own MIT license; see [NOTICE.md](NOTICE.md). Credit for the underlying bot framework belongs to the Mindcraft team and the wider [PrismarineJS](https://github.com/PrismarineJS) ecosystem.
 
 # Getting Started
 
